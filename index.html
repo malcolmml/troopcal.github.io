@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kingshot Troop Calculator - Ordered Input & Output</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; }
+  label, input { margin: 5px 15px 5px 0; display: inline-block; width: 130px; }
+  input[type=number] { width: 80px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+  th, td { border: 1px solid #333; padding: 8px; text-align: center; }
+  th { background-color: #eee; }
+  h2 { margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<h1>Kingshot Troop Allocation Calculator</h1>
+
+<div>
+  <h2>Input Troop Capacity (Ordered by Tier and Type)</h2>
+  <div>
+    <label for="t9Infantry">T9 Infantry:</label><input type="number" id="t9Infantry" min="0" value="0" />
+    <label for="t9Cavalry">T9 Cavalry:</label><input type="number" id="t9Cavalry" min="0" value="0" />
+    <label for="t9Archers">T9 Archers:</label><input type="number" id="t9Archers" min="0" value="0" />
+  </div>
+  <div>
+    <label for="t8Infantry">T8 Infantry:</label><input type="number" id="t8Infantry" min="0" value="0" />
+    <label for="t8Cavalry">T8 Cavalry:</label><input type="number" id="t8Cavalry" min="0" value="0" />
+    <label for="t8Archers">T8 Archers:</label><input type="number" id="t8Archers" min="0" value="0" />
+  </div>
+  <div>
+    <label for="marchCapacity">March Capacity:</label><input type="number" id="marchCapacity" min="1" value="100000" />
+  </div>
+</div>
+
+<h2>Formations 1 & 2 (Defense & Attack, shared troops)</h2>
+<table id="tableDefAtk">
+  <thead>
+    <tr>
+      <th>Formation</th>
+      <th>T9 Infantry</th>
+      <th>T9 Cavalry</th>
+      <th>T9 Archers</th>
+      <th>T8 Infantry</th>
+      <th>T8 Cavalry</th>
+      <th>T8 Archers</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>Formations 3 & 4 (Bear 1 & Bear 2, exclusive troops)</h2>
+<table id="tableBear">
+  <thead>
+    <tr>
+      <th>Formation</th>
+      <th>T9 Infantry</th>
+      <th>T9 Cavalry</th>
+      <th>T9 Archers</th>
+      <th>T8 Infantry</th>
+      <th>T8 Cavalry</th>
+      <th>T8 Archers</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+function sumAllTroops(troops) {
+  return troops.t9Infantry + troops.t9Cavalry + troops.t9Archers + troops.t8Infantry + troops.t8Cavalry + troops.t8Archers;
+}
+
+function distributeRatio(totalCapacity, ratio) {
+  const troops = {};
+  troops.infantry = Math.round(totalCapacity * ratio.infantry);
+  troops.cavalry = Math.round(totalCapacity * ratio.cavalry);
+  troops.archers = Math.round(totalCapacity * ratio.archers);
+
+  const sum = troops.infantry + troops.cavalry + troops.archers;
+  troops.archers += totalCapacity - sum; // Fix rounding error
+
+  return troops;
+}
+
+function splitByTier(distributed, available) {
+  const split = {
+    t9Infantry: Math.min(distributed.infantry, available.t9Infantry),
+    t8Infantry: Math.min(available.t8Infantry, distributed.infantry - Math.min(distributed.infantry, available.t9Infantry)),
+    t9Cavalry: Math.min(distributed.cavalry, available.t9Cavalry),
+    t8Cavalry: Math.min(available.t8Cavalry, distributed.cavalry - Math.min(distributed.cavalry, available.t9Cavalry)),
+    t9Archers: Math.min(distributed.archers, available.t9Archers),
+    t8Archers: Math.min(available.t8Archers, distributed.archers - Math.min(distributed.archers, available.t9Archers))
+  };
+  return split;
+}
+
+function cloneTroops(troops) {
+  return {
+    t9Infantry: troops.t9Infantry,
+    t9Cavalry: troops.t9Cavalry,
+    t9Archers: troops.t9Archers,
+    t8Infantry: troops.t8Infantry,
+    t8Cavalry: troops.t8Cavalry,
+    t8Archers: troops.t8Archers
+  };
+}
+
+function subtractTroops(a, b) {
+  return {
+    t9Infantry: Math.max(0, a.t9Infantry - b.t9Infantry),
+    t9Cavalry: Math.max(0, a.t9Cavalry - b.t9Cavalry),
+    t9Archers: Math.max(0, a.t9Archers - b.t9Archers),
+    t8Infantry: Math.max(0, a.t8Infantry - b.t8Infantry),
+    t8Cavalry: Math.max(0, a.t8Cavalry - b.t8Cavalry),
+    t8Archers: Math.max(0, a.t8Archers - b.t8Archers)
+  };
+}
+
+function calcFormation1And2(available, capacity) {
+  const maxTroops = Math.min(sumAllTroops(available), capacity);
+
+  const ratio1 = { infantry: 0.6, cavalry: 0.2, archers: 0.2 }; // Defense
+  const ratio2 = { infantry: 0.5, cavalry: 0.2, archers: 0.3 }; // Attack
+
+  const formation1 = distributeRatio(maxTroops, ratio1);
+  const formation2 = distributeRatio(maxTroops, ratio2);
+
+  const split1 = splitByTier(formation1, available);
+  const split2 = splitByTier(formation2, available);
+
+  return { formation1: split1, formation2: split2 };
+}
+
+function calcFormation3(available, capacity) {
+  const ratio = { infantry: 0.1, cavalry: 0.1, archers: 0.8 };
+  const maxTroops = Math.min(sumAllTroops(available), capacity);
+  const desiredInfantry = Math.floor(maxTroops * ratio.infantry);
+  const desiredCavalry = Math.floor(maxTroops * ratio.cavalry);
+  const desiredArchers = maxTroops - desiredInfantry - desiredCavalry;
+
+  const desired = { infantry: desiredInfantry, cavalry: desiredCavalry, archers: desiredArchers };
+  return splitByTier(desired, available);
+}
+
+function calcFormation4(availableLeftover, capacity) {
+  const maxTroops = Math.min(sumAllTroops(availableLeftover), capacity);
+
+  let archersTotal = availableLeftover.t9Archers + availableLeftover.t8Archers;
+  let remainder = maxTroops - archersTotal;
+
+  if (remainder < 0) {
+    archersTotal = maxTroops;
+    remainder = 0;
+  }
+
+  const infantryDesired = Math.floor(remainder / 2);
+  const cavalryDesired = remainder - infantryDesired;
+
+  const desired = { infantry: infantryDesired, cavalry: cavalryDesired, archers: archersTotal };
+  return splitByTier(desired, availableLeftover);
+}
+
+function updateTables() {
+  const input = {
+    t9Infantry: Math.max(0, parseInt(document.getElementById('t9Infantry').value) || 0),
+    t9Cavalry: Math.max(0, parseInt(document.getElementById('t9Cavalry').value) || 0),
+    t9Archers: Math.max(0, parseInt(document.getElementById('t9Archers').value) || 0),
+    t8Infantry: Math.max(0, parseInt(document.getElementById('t8Infantry').value) || 0),
+    t8Cavalry: Math.max(0, parseInt(document.getElementById('t8Cavalry').value) || 0),
+    t8Archers: Math.max(0, parseInt(document.getElementById('t8Archers').value) || 0),
+    marchCapacity: Math.max(1, parseInt(document.getElementById('marchCapacity').value) || 1)
+  };
+
+  const sharedTroops = cloneTroops(input);
+  const form12 = calcFormation1And2(sharedTroops, input.marchCapacity);
+
+  const exclusiveTroops = cloneTroops(input);
+  const form3 = calcFormation3(exclusiveTroops, input.marchCapacity);
+
+  const leftover = subtractTroops(exclusiveTroops, form3);
+  const form4 = calcFormation4(leftover, input.marchCapacity);
+
+  const tbody12 = document.getElementById('tableDefAtk').querySelector('tbody');
+  tbody12.innerHTML = '';
+  ['formation1', 'formation2'].forEach((formKey, idx) => {
+    const label = idx === 0 ? 'Formation 1 (Defense 60:20:20)' : 'Formation 2 (Attack 50:20:30)';
+    let f = form12[formKey];
+    let total = Object.values(f).reduce((a,b) => a + b, 0);
+    let row = document.createElement('tr');
+    // Formation label
+    let cellLabel = document.createElement('td');
+    cellLabel.textContent = label;
+    row.appendChild(cellLabel);
+    // Output in order: T9 Inf, T9 Cal, T9 Arch, T8 Inf, T8 Cal, T8 Arch
+    ['t9Infantry', 't9Cavalry', 't9Archers', 't8Infantry', 't8Cavalry', 't8Archers'].forEach(key => {
+      let cell = document.createElement('td');
+      cell.textContent = f[key] || 0;
+      row.appendChild(cell);
+    });
+    // Total
+    let cellTotal = document.createElement('td');
+    cellTotal.textContent = total;
+    row.appendChild(cellTotal);
+    tbody12.appendChild(row);
+  });
+
+  const tbody34 = document.getElementById('tableBear').querySelector('tbody');
+  tbody34.innerHTML = '';
+  [['Formation 3 (Bear 1, max Archers)', form3], ['Formation 4 (Bear 2, leftovers)', form4]].forEach(([label, troops]) => {
+    let total = Object.values(troops).reduce((a,b) => a + b, 0);
+    let row = document.createElement('tr');
+    // Formation label
+    let cellLabel = document.createElement('td');
+    cellLabel.textContent = label;
+    row.appendChild(cellLabel);
+    ['t9Infantry', 't9Cavalry', 't9Archers', 't8Infantry', 't8Cavalry', 't8Archers'].forEach(key => {
+      let cell = document.createElement('td');
+      cell.textContent = troops[key] || 0;
+      row.appendChild(cell);
+    });
+    let cellTotal = document.createElement('td');
+    cellTotal.textContent = total;
+    row.appendChild(cellTotal);
+    tbody34.appendChild(row);
+  });
+}
+
+['t9Infantry','t9Cavalry','t9Archers','t8Infantry','t8Cavalry','t8Archers','marchCapacity'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateTables);
+});
+
+updateTables();
+</script>
+
+</body>
+</html>
